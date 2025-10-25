@@ -84,13 +84,29 @@ def api_telegram_init():
     phone = data.get('phone') or config.TELEGRAM_PHONE
 
     if not all([api_id, api_hash, phone]):
-        return jsonify({'success': False, 'error': 'Missing parameters'})
+        return jsonify({'success': False, 'error': 'Missing parameters', 'message': 'API ID, API Hash va telefon raqam kerak'})
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     result = loop.run_until_complete(telegram_bot.initialize(api_id, api_hash, phone))
 
-    return jsonify({'success': True, 'result': result})
+    # Handle different result types
+    if result == 'code_required':
+        return jsonify({'success': True, 'result': 'code_required', 'message': 'Kod yuborildi. Iltimos, SMS yoki Telegram da kelgan kodni kiriting.'})
+    elif result == 'authorized':
+        return jsonify({'success': True, 'result': 'authorized', 'message': 'Tayyor! Siz Telegram\\'ga ulangansiz.'})
+    elif result == 'invalid_phone':
+        return jsonify({'success': False, 'error': 'invalid_phone', 'message': 'Telefon raqam noto\'g\'ri. Format: +998901234567'})
+    elif result == 'flood_wait':
+        return jsonify({'success': False, 'error': 'flood_wait', 'message': 'Juda ko\'p urinishlar. Biroz kuting va qayta urinib ko\'ring.'})
+    elif result == 'code_error':
+        return jsonify({'success': False, 'error': 'code_error', 'message': 'Kod yuborishda xatolik yuz berdi. Qayta urinib ko\'ring.'})
+    elif result == 'invalid_api':
+        return jsonify({'success': False, 'error': 'invalid_api', 'message': 'API ID yoki API Hash noto\'g\'ri.'})
+    elif result == 'connection_error':
+        return jsonify({'success': False, 'error': 'connection_error', 'message': 'Internetga ulanish muammosi. Qayta urinib ko\'ring.'})
+    else:
+        return jsonify({'success': False, 'error': result, 'message': 'Xatolik yuz berdi. Qayta urinib ko\'ring.'})
 
 @app.route('/api/telegram/verify', methods=['POST'])
 def api_telegram_verify():

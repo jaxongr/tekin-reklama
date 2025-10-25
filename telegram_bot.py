@@ -27,29 +27,58 @@ class TelegramAutoSender:
 
     async def initialize(self, api_id, api_hash, phone):
         """Initialize Telegram client"""
-        self.api_id = api_id
-        self.api_hash = api_hash
-        self.phone = phone
+        try:
+            self.api_id = api_id
+            self.api_hash = api_hash
+            self.phone = phone
 
-        session_path = config.SESSION_DIR / self.session_name
-        self.client = TelegramClient(str(session_path), api_id, api_hash)
+            session_path = config.SESSION_DIR / self.session_name
+            self.client = TelegramClient(str(session_path), api_id, api_hash)
 
-        # Save config
-        config_data = {
-            'api_id': api_id,
-            'api_hash': api_hash,
-            'phone': phone
-        }
-        with open(config.TELEGRAM_CONFIG_FILE, 'w') as f:
-            json.dump(config_data, f)
+            # Save config
+            config_data = {
+                'api_id': api_id,
+                'api_hash': api_hash,
+                'phone': phone
+            }
+            with open(config.TELEGRAM_CONFIG_FILE, 'w') as f:
+                json.dump(config_data, f)
 
-        await self.client.connect()
+            print(f"Connecting to Telegram with phone: {phone}")
+            await self.client.connect()
 
-        if not await self.client.is_user_authorized():
-            await self.client.send_code_request(phone)
-            return 'code_required'
+            if not await self.client.is_user_authorized():
+                print(f"Not authorized. Sending code request to {phone}")
 
-        return 'authorized'
+                try:
+                    # Send code request
+                    result = await self.client.send_code_request(phone)
+                    print(f"Code request sent successfully. Result: {result}")
+                    return 'code_required'
+                except Exception as code_error:
+                    error_str = str(code_error).lower()
+                    print(f"Code request error: {code_error}")
+
+                    if 'invalid' in error_str or 'phone' in error_str:
+                        return 'invalid_phone'
+                    elif 'flood' in error_str:
+                        return 'flood_wait'
+                    else:
+                        return 'code_error'
+            else:
+                print("Already authorized")
+                return 'authorized'
+
+        except Exception as e:
+            print(f"Initialize error: {e}")
+            error_str = str(e).lower()
+
+            if 'api' in error_str or 'hash' in error_str:
+                return 'invalid_api'
+            elif 'connection' in error_str or 'network' in error_str:
+                return 'connection_error'
+            else:
+                return 'initialization_error'
 
     async def verify_code(self, code, password=None):
         """Verify the code sent to phone"""

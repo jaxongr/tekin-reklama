@@ -196,8 +196,18 @@
             if (result.result === 'code_required') {
                 document.getElementById('config-form').style.display = 'none';
                 document.getElementById('code-form').style.display = 'block';
-                showAlert('Kodni kiriting', 'info');
+                showAlert(result.message || 'Kodni kiriting', 'success');
+            } else if (result.result === 'authorized') {
+                showAuthorized();
+                showAlert(result.message || 'Tasdiqlandi!', 'success');
+                loadStats();
+                loadRecentDispatchers();
+                loadGroups();
             }
+        } else {
+            // Handle error messages
+            const errorMsg = result.message || 'Xatolik yuz berdi';
+            showAlert(errorMsg, 'danger');
         }
     }
 
