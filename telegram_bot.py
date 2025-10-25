@@ -155,62 +155,99 @@ class TelegramAutoSender:
     async def verify_code(self, code, password=None):
         """Verify the code sent to phone"""
         try:
-            # Load phone from config if not in memory
-            phone_to_use = self.phone
+            print("[VERIFY] Starting code verification...")
 
-            if not phone_to_use:
-                print("Phone not in memory, loading from config...")
-                try:
-                    with open(config.TELEGRAM_CONFIG_FILE, 'r') as f:
-                        saved_config = json.load(f)
-                        phone_to_use = saved_config.get('phone')
-                        print(f"Loaded phone from config: {phone_to_use}")
-                except:
-                    print("Could not load phone from config")
-                    return False
+            # Load credentials from config
+            phone_to_use = None
+            api_id = None
+            api_hash = None
+            try:
+                with open(config.TELEGRAM_CONFIG_FILE, 'r') as f:
+                    saved_config = json.load(f)
+                    phone_to_use = saved_config.get('phone')
+                    api_id = saved_config.get('api_id')
+                    api_hash = saved_config.get('api_hash')
+                    print(f"[VERIFY] Loaded credentials from config")
+                    print(f"[VERIFY] Phone: {phone_to_use}")
+            except Exception as cfg_error:
+                print(f"[VERIFY] ERROR: Could not load config: {cfg_error}")
+                return False
 
-            if not phone_to_use:
-                print("No phone number available for verification")
+            if not all([phone_to_use, api_id, api_hash]):
+                print("[VERIFY] ERROR: Missing credentials in config!")
                 return False
 
             # Code should be string for Telethon
             code_str = str(code).strip()
+            print(f"[VERIFY] Code length: {len(code_str)}")
 
-            print(f"Attempting sign_in with phone: {phone_to_use}, code length: {len(code_str)}")
+            # Recreate client from session to ensure proper state
+            session_path = config.SESSION_DIR / self.session_name
+            print(f"[VERIFY] Using session: {session_path}")
 
-            # Try to sign in with code
-            await self.client.sign_in(phone_to_use, code_str)
-            print("Sign in successful!")
-            return True
+            try:
+                client = TelegramClient(
+                    str(session_path),
+                    int(api_id),
+                    api_hash,
+                    request_retries=3,
+                    connection_retries=3
+                )
+                print("[VERIFY] Client created")
+
+                # Connect to Telegram
+                await client.connect()
+                print("[VERIFY] Connected to Telegram")
+
+                # Sign in with code
+                print(f"[VERIFY] Calling sign_in with phone={phone_to_use}, code_length={len(code_str)}")
+                await client.sign_in(phone_to_use, code_str)
+                print("[VERIFY] ✓ Sign in SUCCESSFUL!")
+
+                # Save client for future use
+                self.client = client
+                return True
+
+            except Exception as sign_in_error:
+                error_type = type(sign_in_error).__name__
+                error_msg = str(sign_in_error).lower()
+                print(f"[VERIFY] Sign-in error!")
+                print(f"[VERIFY] Type: {error_type}")
+                print(f"[VERIFY] Message: {error_msg}")
+
+                # Check if password is needed (2FA)
+                if 'password' in error_msg or '2fa' in error_msg or 'session_password_needed' in error_msg:
+                    print(f"[VERIFY] -> Password required for 2FA")
+
+                    if password:
+                        try:
+                            print(f"[VERIFY] Attempting 2FA with password...")
+                            await client.sign_in(password=password)
+                            print("[VERIFY] ✓ 2FA sign in SUCCESSFUL!")
+                            self.client = client
+                            return True
+                        except Exception as pwd_error:
+                            print(f"[VERIFY] Password verification failed: {pwd_error}")
+                            return False
+
+                    return 'password_required'
+
+                # Check if code is invalid
+                elif 'invalid' in error_msg or 'expired' in error_msg or 'code_invalid' in error_msg:
+                    print(f"[VERIFY] -> Invalid or expired code")
+                    return False
+
+                else:
+                    print(f"[VERIFY] -> Other sign-in error")
+                    raise
+
         except Exception as e:
-            error_str = str(e).lower()
-            print(f"Sign in error: {e}")
-            print(f"Error string: {error_str}")
-
-            # Check if password is needed (2FA)
-            if 'password' in error_str or '2fa' in error_str or 'session_password_needed' in error_str:
-                print(f"Password required for 2FA")
-
-                # If password is provided, try to use it
-                if password:
-                    try:
-                        await self.client.sign_in(password=password)
-                        return True
-                    except Exception as pwd_error:
-                        print(f"Password verification failed: {pwd_error}")
-                        return False
-
-                return 'password_required'
-
-            # Check if code is invalid
-            elif 'invalid' in error_str or 'expired' in error_str or 'code_invalid' in error_str:
-                print(f"Invalid or expired code")
-                return False
-
-            # Other errors
-            else:
-                print(f"Code verification error: {e}")
-                return False
+            print(f"[VERIFY] EXCEPTION occurred!")
+            print(f"[VERIFY] Type: {type(e).__name__}")
+            print(f"[VERIFY] Message: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     async def load_saved_session(self):
         """Load previously saved session"""
@@ -221,12 +258,18 @@ class TelegramAutoSender:
             with open(config.TELEGRAM_CONFIG_FILE, 'r') as f:
                 config_data = json.load(f)
 
-            self.api_id = config_data['api_id']
+            self.api_id = int(config_data['api_id'])
             self.api_hash = config_data['api_hash']
             self.phone = config_data['phone']
 
             session_path = config.SESSION_DIR / self.session_name
-            self.client = TelegramClient(str(session_path), self.api_id, self.api_hash)
+            self.client = TelegramClient(
+                str(session_path),
+                self.api_id,
+                self.api_hash,
+                request_retries=3,
+                connection_retries=3
+            )
 
             await self.client.connect()
 
