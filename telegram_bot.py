@@ -105,6 +105,12 @@ class TelegramAutoSender:
                     result = await self.client.send_code_request(validated_phone)
                     print(f"[INIT] send_code_request result: {result}")
                     print(f"[INIT] Code request sent successfully!")
+
+                    # Properly save session before disconnecting
+                    print(f"[INIT] Saving session state...")
+                    await self.client.disconnect()
+                    print(f"[INIT] Client disconnected and session saved")
+
                     return 'code_required'
                 except Exception as code_error:
                     error_type = type(code_error).__name__
@@ -185,21 +191,37 @@ class TelegramAutoSender:
             session_path = config.SESSION_DIR / self.session_name
             print(f"[VERIFY] Using session: {session_path}")
 
+            # Retry logic in case session file is locked
+            client = None
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    if attempt > 0:
+                        print(f"[VERIFY] Retry attempt {attempt}/{max_retries-1}")
+                        import asyncio
+                        await asyncio.sleep(0.5)
+
+                    client = TelegramClient(
+                        str(session_path),
+                        int(api_id),
+                        api_hash,
+                        request_retries=3,
+                        connection_retries=3
+                    )
+                    print("[VERIFY] Client created")
+
+                    # Connect to Telegram with timeout
+                    print("[VERIFY] Connecting to Telegram...")
+                    await client.connect()
+                    print("[VERIFY] Connected to Telegram")
+                    break
+                except Exception as connect_error:
+                    print(f"[VERIFY] Connection attempt {attempt+1} failed: {connect_error}")
+                    if attempt == max_retries - 1:
+                        raise
+
+            # Sign in with code
             try:
-                client = TelegramClient(
-                    str(session_path),
-                    int(api_id),
-                    api_hash,
-                    request_retries=3,
-                    connection_retries=3
-                )
-                print("[VERIFY] Client created")
-
-                # Connect to Telegram
-                await client.connect()
-                print("[VERIFY] Connected to Telegram")
-
-                # Sign in with code
                 print(f"[VERIFY] Calling sign_in with phone={phone_to_use}, code_length={len(code_str)}")
                 await client.sign_in(phone_to_use, code_str)
                 print("[VERIFY] ✓ Sign in SUCCESSFUL!")
