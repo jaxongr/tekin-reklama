@@ -94,19 +94,26 @@ def api_telegram_init():
     if result == 'code_required':
         return jsonify({'success': True, 'result': 'code_required', 'message': 'Kod yuborildi. Iltimos, SMS yoki Telegram da kelgan kodni kiriting.'})
     elif result == 'authorized':
-        return jsonify({'success': True, 'result': 'authorized', 'message': 'Tayyor! Siz Telegram\\'ga ulangansiz.'})
+        msg = 'Tayyor! Siz Telegram ga ulangansiz.'
+        return jsonify({'success': True, 'result': 'authorized', 'message': msg})
     elif result == 'invalid_phone':
-        return jsonify({'success': False, 'error': 'invalid_phone', 'message': 'Telefon raqam noto\'g\'ri. Format: +998901234567'})
+        msg = 'Telefon raqam notogri. Format: +998901234567'
+        return jsonify({'success': False, 'error': 'invalid_phone', 'message': msg})
     elif result == 'flood_wait':
-        return jsonify({'success': False, 'error': 'flood_wait', 'message': 'Juda ko\'p urinishlar. Biroz kuting va qayta urinib ko\'ring.'})
+        msg = 'Juda kop urinishlar. Biroz kuting va qayta urinib koring.'
+        return jsonify({'success': False, 'error': 'flood_wait', 'message': msg})
     elif result == 'code_error':
-        return jsonify({'success': False, 'error': 'code_error', 'message': 'Kod yuborishda xatolik yuz berdi. Qayta urinib ko\'ring.'})
+        msg = 'Kod yuborishda xatolik yuz berdi. Qayta urinib koring.'
+        return jsonify({'success': False, 'error': 'code_error', 'message': msg})
     elif result == 'invalid_api':
-        return jsonify({'success': False, 'error': 'invalid_api', 'message': 'API ID yoki API Hash noto\'g\'ri.'})
+        msg = 'API ID yoki API Hash notogri.'
+        return jsonify({'success': False, 'error': 'invalid_api', 'message': msg})
     elif result == 'connection_error':
-        return jsonify({'success': False, 'error': 'connection_error', 'message': 'Internetga ulanish muammosi. Qayta urinib ko\'ring.'})
+        msg = 'Internetga ulanish muammosi. Qayta urinib koring.'
+        return jsonify({'success': False, 'error': 'connection_error', 'message': msg})
     else:
-        return jsonify({'success': False, 'error': result, 'message': 'Xatolik yuz berdi. Qayta urinib ko\'ring.'})
+        msg = 'Xatolik yuz berdi. Qayta urinib koring.'
+        return jsonify({'success': False, 'error': result, 'message': msg})
 
 @app.route('/api/telegram/verify', methods=['POST'])
 def api_telegram_verify():
