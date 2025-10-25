@@ -105,12 +105,9 @@ class TelegramAutoSender:
                     result = await self.client.send_code_request(validated_phone)
                     print(f"[INIT] send_code_request result: {result}")
                     print(f"[INIT] Code request sent successfully!")
-
-                    # Properly save session before disconnecting
-                    print(f"[INIT] Saving session state...")
-                    await self.client.disconnect()
-                    print(f"[INIT] Client disconnected and session saved")
-
+                    print(f"[INIT] Keeping client CONNECTED for verify_code()...")
+                    # DO NOT DISCONNECT - keep client connected for verify_code() to use
+                    # Telethon requires the same client instance that called send_code_request()
                     return 'code_required'
                 except Exception as code_error:
                     error_type = type(code_error).__name__
@@ -163,19 +160,6 @@ class TelegramAutoSender:
         try:
             print("[VERIFY] Starting code verification...")
 
-            # If we have the client from initialize, just use it directly
-            if self.client and await self.client.is_connected():
-                print("[VERIFY] Using existing connected client from initialize()")
-                try:
-                    code_str = str(code).strip()
-                    print(f"[VERIFY] Signing in with code (length: {len(code_str)})")
-                    await self.client.sign_in(self.phone, code_str)
-                    print("[VERIFY] ✓ Sign in SUCCESSFUL!")
-                    return True
-                except Exception as direct_error:
-                    print(f"[VERIFY] Direct sign-in failed: {direct_error}")
-                    # Fall through to rebuild client
-
             # Load credentials from config
             phone_to_use = None
             api_id = None
@@ -186,31 +170,33 @@ class TelegramAutoSender:
                     phone_to_use = saved_config.get('phone')
                     api_id = saved_config.get('api_id')
                     api_hash = saved_config.get('api_hash')
-                    print(f"[VERIFY] Loaded credentials from config: phone={phone_to_use}")
+                    print(f"[VERIFY] Config yuklandi: phone={phone_to_use}")
             except Exception as cfg_error:
-                print(f"[VERIFY] ERROR loading config: {cfg_error}")
+                print(f"[VERIFY] CONFIG XATOSI: {cfg_error}")
                 return False
 
             if not all([phone_to_use, api_id, api_hash]):
-                print("[VERIFY] ERROR: Missing credentials in config!")
+                print("[VERIFY] XATO: Config'da credentials yo'q!")
                 return False
 
             # Code should be string for Telethon
             code_str = str(code).strip()
-            print(f"[VERIFY] Code to verify (length: {len(code_str)})")
+            print(f"[VERIFY] Kod tekshirilmoqda (uzunligi: {len(code_str)})")
 
-            # Recreate client from session file
+            # Session file dan client yaratish
             session_path = config.SESSION_DIR / self.session_name
-            print(f"[VERIFY] Session file: {session_path}")
+            print(f"[VERIFY] Session fayli: {session_path}")
 
-            # Check if session file exists
+            # Session fayli borligini tekshir
             import os
             session_file = f"{session_path}.session"
             if os.path.exists(session_file):
-                print(f"[VERIFY] Session file exists, attempting to restore...")
+                print(f"[VERIFY] ✓ Session fayli topildi")
             else:
-                print(f"[VERIFY] No session file found - this might be the problem!")
+                print(f"[VERIFY] ⚠ Session fayli topilmadi!")
 
+            # Yangi client yaratish (har bir event loop uchun)
+            # Bu zarur chunki her HTTP request yangi event loop yaratadi
             client = TelegramClient(
                 str(session_path),
                 int(api_id),
@@ -218,43 +204,49 @@ class TelegramAutoSender:
                 request_retries=3,
                 connection_retries=3
             )
-            print("[VERIFY] Client created from session")
+            print("[VERIFY] TelegramClient yaratildi")
 
-            # Connect to Telegram
-            print("[VERIFY] Connecting to Telegram...")
+            # Telegram'ga ulanish
+            print("[VERIFY] Telegram'ga ulanilmoqda...")
             await client.connect()
-            print("[VERIFY] Connected!")
+            print("[VERIFY] ✓ Ulandi!")
 
-            # Sign in with code
-            print(f"[VERIFY] Calling sign_in(phone={phone_to_use}, code=***)")
+            # Kod bilan kirish
+            print(f"[VERIFY] sign_in chaqirilmoqda (phone={phone_to_use}, code=***)")
             await client.sign_in(phone_to_use, code_str)
-            print("[VERIFY] ✓ Sign in SUCCESSFUL!")
+            print("[VERIFY] ✓ SIGNIN MUVAFFAQ!")
 
-            # Save client for future use
+            # Client'ni saqlash keyingi ish uchun
             self.client = client
             self.phone = phone_to_use
+            self.api_id = int(api_id)
+            self.api_hash = api_hash
+
             return True
 
         except Exception as e:
             error_type = type(e).__name__
-            error_msg = str(e).lower()
+            error_msg = str(e)
+            error_msg_lower = error_msg.lower()
+
             print(f"[VERIFY] EXCEPTION: {error_type}")
-            print(f"[VERIFY] Message: {error_msg}")
+            print(f"[VERIFY] Xato: {error_msg}")
+
             import traceback
             traceback.print_exc()
 
-            # Check if password is needed (2FA)
-            if 'password' in error_msg or '2fa' in error_msg or 'session_password_needed' in error_msg:
-                print(f"[VERIFY] -> Password required for 2FA")
+            # 2FA parol kerakligini tekshir
+            if 'password' in error_msg_lower or '2fa' in error_msg_lower or 'session_password_needed' in error_msg_lower:
+                print(f"[VERIFY] -> 2FA uchun parol kerak")
                 return 'password_required'
 
-            # Check if code is invalid
-            elif 'invalid' in error_msg or 'expired' in error_msg or 'code_invalid' in error_msg:
-                print(f"[VERIFY] -> Invalid or expired code")
+            # Kod notogri yoki eskirganligini tekshir
+            elif 'invalid' in error_msg_lower or 'expired' in error_msg_lower or 'code_invalid' in error_msg_lower:
+                print(f"[VERIFY] -> Kod notogri yoki eski")
                 return False
 
             else:
-                print(f"[VERIFY] -> Unexpected error during verification")
+                print(f"[VERIFY] -> Kutilmagan xato")
                 return False
 
     async def load_saved_session(self):
