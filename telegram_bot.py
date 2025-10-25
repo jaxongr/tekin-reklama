@@ -122,18 +122,41 @@ class TelegramAutoSender:
     async def verify_code(self, code, password=None):
         """Verify the code sent to phone"""
         try:
-            # Convert code to integer if it's a string
-            code_int = int(code) if isinstance(code, str) else code
+            # Load phone from config if not in memory
+            phone_to_use = self.phone
+
+            if not phone_to_use:
+                print("Phone not in memory, loading from config...")
+                try:
+                    with open(config.TELEGRAM_CONFIG_FILE, 'r') as f:
+                        saved_config = json.load(f)
+                        phone_to_use = saved_config.get('phone')
+                        print(f"Loaded phone from config: {phone_to_use}")
+                except:
+                    print("Could not load phone from config")
+                    return False
+
+            if not phone_to_use:
+                print("No phone number available for verification")
+                return False
+
+            # Code should be string for Telethon
+            code_str = str(code).strip()
+
+            print(f"Attempting sign_in with phone: {phone_to_use}, code length: {len(code_str)}")
 
             # Try to sign in with code
-            await self.client.sign_in(self.phone, code_int)
+            await self.client.sign_in(phone_to_use, code_str)
+            print("Sign in successful!")
             return True
         except Exception as e:
             error_str = str(e).lower()
+            print(f"Sign in error: {e}")
+            print(f"Error string: {error_str}")
 
             # Check if password is needed (2FA)
             if 'password' in error_str or '2fa' in error_str or 'session_password_needed' in error_str:
-                print(f"Password required for 2FA: {e}")
+                print(f"Password required for 2FA")
 
                 # If password is provided, try to use it
                 if password:
@@ -147,8 +170,8 @@ class TelegramAutoSender:
                 return 'password_required'
 
             # Check if code is invalid
-            elif 'invalid' in error_str or 'expired' in error_str:
-                print(f"Invalid or expired code: {e}")
+            elif 'invalid' in error_str or 'expired' in error_str or 'code_invalid' in error_str:
+                print(f"Invalid or expired code")
                 return False
 
             # Other errors
