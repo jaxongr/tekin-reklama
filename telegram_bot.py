@@ -25,44 +25,82 @@ class TelegramAutoSender:
         self.scheduler_task = None
         self.cleanup_task = None
 
+    def _validate_phone(self, phone):
+        """Validate and format phone number"""
+        import re
+        # Remove spaces, dashes, parentheses
+        phone = re.sub(r'[\s\-\(\)]+', '', str(phone))
+
+        # Must start with + or just digits
+        if not phone.startswith('+'):
+            # If no +, assume it's just digits and add +
+            phone = '+' + phone
+
+        # Check if it's valid format
+        if not re.match(r'^\+\d{10,15}$', phone):
+            return None
+
+        return phone
+
     async def initialize(self, api_id, api_hash, phone):
         """Initialize Telegram client"""
         try:
+            # Validate phone format
+            validated_phone = self._validate_phone(phone)
+            if not validated_phone:
+                print(f"Invalid phone format: {phone}")
+                return 'invalid_phone'
+
             self.api_id = api_id
             self.api_hash = api_hash
-            self.phone = phone
+            self.phone = validated_phone
 
             session_path = config.SESSION_DIR / self.session_name
-            self.client = TelegramClient(str(session_path), api_id, api_hash)
+
+            # Remove old session if exists to avoid conflicts
+            import os
+            session_file = f"{session_path}.session"
+            if os.path.exists(session_file):
+                try:
+                    os.remove(session_file)
+                    print(f"Removed old session file")
+                except:
+                    pass
+
+            self.client = TelegramClient(str(session_path), int(api_id), api_hash)
 
             # Save config
             config_data = {
                 'api_id': api_id,
                 'api_hash': api_hash,
-                'phone': phone
+                'phone': validated_phone
             }
             with open(config.TELEGRAM_CONFIG_FILE, 'w') as f:
                 json.dump(config_data, f)
 
-            print(f"Connecting to Telegram with phone: {phone}")
+            print(f"Connecting to Telegram with phone: {validated_phone}")
             await self.client.connect()
 
             if not await self.client.is_user_authorized():
-                print(f"Not authorized. Sending code request to {phone}")
+                print(f"Not authorized. Sending code request to {validated_phone}")
 
                 try:
                     # Send code request
-                    result = await self.client.send_code_request(phone)
+                    print(f"Attempting send_code_request with phone: {validated_phone}")
+                    result = await self.client.send_code_request(validated_phone)
                     print(f"Code request sent successfully. Result: {result}")
                     return 'code_required'
                 except Exception as code_error:
                     error_str = str(code_error).lower()
                     print(f"Code request error: {code_error}")
+                    print(f"Error type: {type(code_error).__name__}")
 
                     if 'invalid' in error_str or 'phone' in error_str:
                         return 'invalid_phone'
-                    elif 'flood' in error_str:
+                    elif 'flood' in error_str or 'too many' in error_str:
                         return 'flood_wait'
+                    elif 'not registered' in error_str or 'signup' in error_str:
+                        return 'not_registered'
                     else:
                         return 'code_error'
             else:
@@ -71,6 +109,7 @@ class TelegramAutoSender:
 
         except Exception as e:
             print(f"Initialize error: {e}")
+            print(f"Error type: {type(e).__name__}")
             error_str = str(e).lower()
 
             if 'api' in error_str or 'hash' in error_str:

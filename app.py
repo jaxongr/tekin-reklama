@@ -99,17 +99,20 @@ def api_telegram_init():
     elif result == 'invalid_phone':
         msg = 'Telefon raqam notogri. Format: +998901234567'
         return jsonify({'success': False, 'error': 'invalid_phone', 'message': msg})
+    elif result == 'not_registered':
+        msg = 'Bu telefon raqam Telegram da roʻyxatdan oʻtmagan. Avval Telegram app orqali roʻyxatdan oʻting.'
+        return jsonify({'success': False, 'error': 'not_registered', 'message': msg})
     elif result == 'flood_wait':
-        msg = 'Juda kop urinishlar. Biroz kuting va qayta urinib koring.'
+        msg = 'Juda kop urinishlar. 24 soat kutib qayta urinib koring.'
         return jsonify({'success': False, 'error': 'flood_wait', 'message': msg})
     elif result == 'code_error':
         msg = 'Kod yuborishda xatolik yuz berdi. Qayta urinib koring.'
         return jsonify({'success': False, 'error': 'code_error', 'message': msg})
     elif result == 'invalid_api':
-        msg = 'API ID yoki API Hash notogri.'
+        msg = 'API ID yoki API Hash notogri. Developer.telegram.org da tekshiring.'
         return jsonify({'success': False, 'error': 'invalid_api', 'message': msg})
     elif result == 'connection_error':
-        msg = 'Internetga ulanish muammosi. Qayta urinib koring.'
+        msg = 'Internetga ulanish muammosi. Internet tezligini tekshiring.'
         return jsonify({'success': False, 'error': 'connection_error', 'message': msg})
     else:
         msg = 'Xatolik yuz berdi. Qayta urinib koring.'
