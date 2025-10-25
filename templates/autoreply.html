@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}Auto-Reply - Telegram Auto Sender{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Auto-Reply Shablon Qo'shish</h2>
+
+    <form id="templateForm" onsubmit="addTemplate(event)">
+        <div class="form-group">
+            <label class="form-label">Javob Matni</label>
+            <textarea class="form-textarea" id="templateText" required
+                placeholder="Bu yerga avtomatik javob matnini kiriting..."></textarea>
+        </div>
+
+        <div class="alert alert-info">
+            Bu matn dispetcherlar xabar yozganda avtomatik yuboriladi. Har bir dispetcherga 1 soatda 1 marta javob beriladi.
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">
+                Shablon Qo'shish
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Auto-Reply Shablonlar</h2>
+
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Javob Matni</th>
+                    <th>Status</th>
+                    <th>Qo'shildi</th>
+                    <th>Amallar</th>
+                </tr>
+            </thead>
+            <tbody id="templatesList">
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray);">
+                        Shablonlar yo'q
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Dispetcher Filtrlari</h2>
+
+    <form id="filterForm" onsubmit="addFilter(event)">
+        <div class="form-group">
+            <label class="form-label">Filtr Turi</label>
+            <select class="form-select" id="filterType">
+                <option value="keyword">Kalit So'z</option>
+                <option value="user_id">User ID</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Filtr Qiymati</label>
+            <input type="text" class="form-input" id="filterValue" required
+                placeholder="Masalan: срочно, груз, yuk, tezkor">
+        </div>
+
+        <div class="alert alert-info">
+            Kalit so'z: Xabarda bu so'z bo'lsa dispetcher deb hisoblanadi<br>
+            User ID: Aniq foydalanuvchi ID raqami bo'yicha filtrlash
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">
+                Filtr Qo'shish
+            </button>
+        </div>
+    </form>
+
+    <h3 style="margin-top: 2rem;">Mavjud Filtrlar</h3>
+
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Turi</th>
+                    <th>Qiymati</th>
+                    <th>Qo'shildi</th>
+                    <th>Amallar</th>
+                </tr>
+            </thead>
+            <tbody id="filtersList">
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray);">
+                        Filtrlar yo'q
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Load data on page load
+    loadTemplates();
+    loadFilters();
+
+    async function addTemplate(event) {
+        event.preventDefault();
+
+        const templateText = document.getElementById('templateText').value;
+
+        const result = await apiRequest('/api/autoreply/add', {
+            method: 'POST',
+            body: JSON.stringify({ template_text: templateText })
+        });
+
+        if (result.success) {
+            showAlert('Shablon muvaffaqiyatli qo\'shildi!', 'success');
+            document.getElementById('templateForm').reset();
+            loadTemplates();
+        } else {
+            showAlert('Xatolik: ' + (result.error || 'Noma\'lum xato'), 'danger');
+        }
+    }
+
+    async function loadTemplates() {
+        const result = await apiRequest('/api/autoreply/templates');
+
+        if (result.success) {
+            const templates = result.templates;
+            const tbody = document.getElementById('templatesList');
+            tbody.innerHTML = '';
+
+            if (templates.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray);">
+                            Shablonlar yo'q
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            templates.forEach(template => {
+                const row = document.createElement('tr');
+                const createdDate = new Date(template.created_date);
+                const textPreview = template.template_text.length > 100
+                    ? template.template_text.substring(0, 100) + '...'
+                    : template.template_text;
+
+                row.innerHTML = `
+                    <td>${template.id}</td>
+                    <td>${textPreview}</td>
+                    <td>
+                        <label class="status-indicator ${template.is_active ? 'online' : 'offline'}">
+                            <input type="checkbox" ${template.is_active ? 'checked' : ''}
+                                onchange="toggleTemplate(${template.id}, this.checked)"
+                                style="margin-right: 0.5rem;">
+                            ${template.is_active ? 'Faol' : 'O\'chirilgan'}
+                        </label>
+                    </td>
+                    <td>${createdDate.toLocaleString('uz-UZ')}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteTemplate(${template.id})">
+                            O'chirish
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+
+    async function toggleTemplate(templateId, isActive) {
+        const result = await apiRequest(`/api/autoreply/toggle/${templateId}`, {
+            method: 'POST',
+            body: JSON.stringify({ is_active: isActive ? 1 : 0 })
+        });
+
+        if (result.success) {
+            showAlert('Shablon yangilandi', 'success');
+            loadTemplates();
+        }
+    }
+
+    async function deleteTemplate(templateId) {
+        if (!confirm('Bu shablonni o\'chirmoqchimisiz?')) {
+            return;
+        }
+
+        const result = await apiRequest(`/api/autoreply/delete/${templateId}`, {
+            method: 'DELETE'
+        });
+
+        if (result.success) {
+            showAlert('Shablon o\'chirildi', 'success');
+            loadTemplates();
+        }
+    }
+
+    async function addFilter(event) {
+        event.preventDefault();
+
+        const filterType = document.getElementById('filterType').value;
+        const filterValue = document.getElementById('filterValue').value;
+
+        const result = await apiRequest('/api/filters/add', {
+            method: 'POST',
+            body: JSON.stringify({
+                filter_type: filterType,
+                filter_value: filterValue
+            })
+        });
+
+        if (result.success) {
+            showAlert('Filtr muvaffaqiyatli qo\'shildi!', 'success');
+            document.getElementById('filterForm').reset();
+            loadFilters();
+        } else {
+            showAlert('Xatolik: ' + (result.error || 'Noma\'lum xato'), 'danger');
+        }
+    }
+
+    async function loadFilters() {
+        const result = await apiRequest('/api/filters/list');
+
+        if (result.success) {
+            const filters = result.filters;
+            const tbody = document.getElementById('filtersList');
+            tbody.innerHTML = '';
+
+            if (filters.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray);">
+                            Filtrlar yo'q
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filters.forEach(filter => {
+                const row = document.createElement('tr');
+                const addedDate = new Date(filter.added_date);
+
+                row.innerHTML = `
+                    <td>${filter.id}</td>
+                    <td>
+                        <span class="badge badge-info">
+                            ${filter.filter_type === 'keyword' ? 'Kalit So\'z' : 'User ID'}
+                        </span>
+                    </td>
+                    <td><strong>${filter.filter_value}</strong></td>
+                    <td>${addedDate.toLocaleString('uz-UZ')}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteFilter(${filter.id})">
+                            O'chirish
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+
+    async function deleteFilter(filterId) {
+        if (!confirm('Bu filtrni o\'chirmoqchimisiz?')) {
+            return;
+        }
+
+        const result = await apiRequest(`/api/filters/delete/${filterId}`, {
+            method: 'DELETE'
+        });
+
+        if (result.success) {
+            showAlert('Filtr o\'chirildi', 'success');
+            loadFilters();
+        }
+    }
+</script>
+{% endblock %}

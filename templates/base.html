@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Telegram Auto Sender{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>Telegram Auto Sender</h1>
+            <p>Avtomatik xabar yuborish va auto-reply tizimi</p>
+        </div>
+    </div>
+
+    <nav class="nav">
+        <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+            Dashboard
+        </a>
+        <a href="{{ url_for('scheduled') }}" class="nav-link {% if request.endpoint == 'scheduled' %}active{% endif %}">
+            Rejalashtirilgan Habarlar
+        </a>
+        <a href="{{ url_for('autoreply') }}" class="nav-link {% if request.endpoint == 'autoreply' %}active{% endif %}">
+            Auto-Reply
+        </a>
+        <a href="{{ url_for('reports') }}" class="nav-link {% if request.endpoint == 'reports' %}active{% endif %}">
+            Hisobotlar
+        </a>
+    </nav>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+        function showAlert(message, type = 'success') {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+
+            const container = document.querySelector('.container');
+            if (container.firstChild) {
+                container.insertBefore(alert, container.firstChild);
+            } else {
+                container.appendChild(alert);
+            }
+
+            setTimeout(() => alert.remove(), 4000);
+        }
+
+        async function apiRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                showAlert('Xatolik: ' + error.message, 'danger');
+                return { success: false };
+            }
+        }
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

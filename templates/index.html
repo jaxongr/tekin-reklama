@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Telegram Auto Sender{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h2>Telegram Sozlamalari</h2>
+
+    <div id="status-alert" style="display: none;"></div>
+
+    <div id="config-form">
+        <div class="form-group">
+            <label class="form-label">API ID</label>
+            <input type="text" class="form-input" id="apiId" placeholder="26272006">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">API Hash</label>
+            <input type="text" class="form-input" id="apiHash" placeholder="c079bb3c3e441eeb516e5672f1a06f47">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Telefon Raqam</label>
+            <input type="text" class="form-input" id="phone" placeholder="+998901234567">
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="initSession()">Ulanish</button>
+        </div>
+    </div>
+
+    <div id="code-form" style="display: none;">
+        <div class="alert alert-info">
+            Telegram'dan kelgan kodni kiriting
+        </div>
+        <div class="form-group">
+            <label class="form-label">Kod</label>
+            <input type="text" class="form-input" id="code" placeholder="12345">
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-success" onclick="verifyCode()">Tasdiqlash</button>
+        </div>
+    </div>
+
+    <div id="bot-controls" style="display: none;">
+        <div class="btn-group">
+            <button class="btn btn-success" onclick="startBot()">Ishga Tushirish</button>
+            <button class="btn btn-danger" onclick="stopBot()">To'xtatish</button>
+            <button class="btn btn-primary" onclick="fetchGroups()">Guruhlarni Yangilash</button>
+        </div>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-box">
+        <div class="value" id="uniqueUsers">0</div>
+        <div class="label">Unikal Userlar</div>
+    </div>
+    <div class="stat-box">
+        <div class="value" id="totalMessages">0</div>
+        <div class="label">Yuborilgan Habarlar</div>
+    </div>
+    <div class="stat-box">
+        <div class="value" id="totalReplies">0</div>
+        <div class="label">Auto-Reply</div>
+    </div>
+    <div class="stat-box">
+        <div class="value" id="totalInteractions">0</div>
+        <div class="label">Javob Berildi</div>
+    </div>
+    <div class="stat-box">
+        <div class="value" id="dispatchersDetected">0</div>
+        <div class="label">Dispetcherlar</div>
+    </div>
+    <div class="stat-box">
+        <div class="value" id="dispatcherReplies">0</div>
+        <div class="label">Dispetcher Javoblari</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>So'nggi Topilgan Dispetcherlar</h2>
+
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>User ID</th>
+                    <th>Vaqt</th>
+                    <th>Javob</th>
+                </tr>
+            </thead>
+            <tbody id="dispatchersTable">
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #6b7280;">
+                        Dispetcherlar topilmadi
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Guruhlar</h2>
+
+    <div style="margin-bottom: 16px; color: #6b7280; font-size: 14px;">
+        Jami guruhlar: <strong id="totalGroups">0</strong>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nomi</th>
+                    <th>A'zolar</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="groupsList">
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #6b7280;">
+                        Guruhlar yuklanmadi
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let botStatus = {
+        isRunning: false,
+        isAuthorized: false
+    };
+
+    checkSession();
+    loadEnvConfig();
+
+    async function checkSession() {
+        const result = await apiRequest('/api/telegram/load_session', { method: 'POST' });
+        if (result.success) {
+            showAuthorized();
+            loadStats();
+            loadRecentDispatchers();
+            loadGroups();
+        }
+    }
+
+    async function loadEnvConfig() {
+        const result = await apiRequest('/api/telegram/config');
+        if (result.success && result.config) {
+            if (result.config.api_id) document.getElementById('apiId').value = result.config.api_id;
+            if (result.config.api_hash) document.getElementById('apiHash').value = result.config.api_hash;
+            if (result.config.phone) document.getElementById('phone').value = result.config.phone;
+        }
+    }
+
+    function showAuthorized() {
+        document.getElementById('config-form').style.display = 'none';
+        document.getElementById('code-form').style.display = 'none';
+        document.getElementById('bot-controls').style.display = 'block';
+
+        const alert = document.getElementById('status-alert');
+        alert.className = 'alert alert-success';
+        alert.textContent = '✓ Telegram\'ga ulandi';
+        alert.style.display = 'block';
+    }
+
+    async function initSession() {
+        const apiId = document.getElementById('apiId').value;
+        const apiHash = document.getElementById('apiHash').value;
+        const phone = document.getElementById('phone').value;
+
+        if (!apiId || !apiHash || !phone) {
+            showAlert('Barcha maydonlarni to\'ldiring', 'warning');
+            return;
+        }
+
+        const result = await apiRequest('/api/telegram/init', {
+            method: 'POST',
+            body: JSON.stringify({ api_id: apiId, api_hash: apiHash, phone })
+        });
+
+        if (result.success) {
+            if (result.result === 'code_required') {
+                document.getElementById('config-form').style.display = 'none';
+                document.getElementById('code-form').style.display = 'block';
+                showAlert('Kodni kiriting', 'info');
+            }
+        }
+    }
+
+    async function verifyCode() {
+        const code = document.getElementById('code').value;
+        if (!code) {
+            showAlert('Kodni kiriting', 'warning');
+            return;
+        }
+
+        const result = await apiRequest('/api/telegram/verify', {
+            method: 'POST',
+            body: JSON.stringify({ code })
+        });
+
+        if (result.success) {
+            showAuthorized();
+            showAlert('Tasdiqlandi!', 'success');
+            loadStats();
+        } else {
+            showAlert('Noto\'g\'ri kod', 'danger');
+        }
+    }
+
+    async function startBot() {
+        const result = await apiRequest('/api/telegram/start', { method: 'POST' });
+        if (result.success) {
+            showAlert('Bot ishga tushdi', 'success');
+            botStatus.isRunning = true;
+        }
+    }
+
+    async function stopBot() {
+        const result = await apiRequest('/api/telegram/stop', { method: 'POST' });
+        if (result.success) {
+            showAlert('Bot to\'xtatildi', 'info');
+            botStatus.isRunning = false;
+        }
+    }
+
+    async function fetchGroups() {
+        showAlert('Guruhlar yuklanmoqda...', 'info');
+        const result = await apiRequest('/api/groups/fetch', { method: 'POST' });
+        if (result.success) {
+            showAlert(`${result.groups.length} ta guruh yuklandi`, 'success');
+            loadGroups();
+        }
+    }
+
+    async function loadStats() {
+        const result = await apiRequest('/api/stats?days=7');
+        if (result.success) {
+            const stats = result.stats;
+            document.getElementById('uniqueUsers').textContent = stats.unique_users_replied;
+            document.getElementById('totalMessages').textContent = stats.total_messages;
+            document.getElementById('totalReplies').textContent = stats.total_autoreplies;
+            document.getElementById('totalInteractions').textContent = stats.total_interactions;
+            document.getElementById('dispatchersDetected').textContent = stats.dispatchers_detected || 0;
+            document.getElementById('dispatcherReplies').textContent = stats.dispatcher_replies || 0;
+        }
+    }
+
+    async function loadRecentDispatchers() {
+        const result = await apiRequest('/api/dispatchers/recent');
+        if (result.success) {
+            const dispatchers = result.dispatchers || [];
+            const tbody = document.getElementById('dispatchersTable');
+            tbody.innerHTML = '';
+
+            if (dispatchers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #6b7280;">Dispetcherlar topilmadi</td></tr>';
+                return;
+            }
+
+            dispatchers.forEach(d => {
+                const row = document.createElement('tr');
+                const time = new Date(d.reply_time).toLocaleString('uz-UZ');
+                const username = d.dispatcher_username || `User ${d.dispatcher_user_id}`;
+                row.innerHTML = `
+                    <td><strong>${username}</strong></td>
+                    <td>${d.dispatcher_user_id}</td>
+                    <td>${time}</td>
+                    <td>${d.reply_text.substring(0, 30)}...</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+
+    async function loadGroups() {
+        const result = await apiRequest('/api/groups/list');
+        if (result.success) {
+            const groups = result.groups;
+            document.getElementById('totalGroups').textContent = groups.length;
+
+            const tbody = document.getElementById('groupsList');
+            tbody.innerHTML = '';
+
+            if (groups.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #6b7280;">Guruhlar topilmadi</td></tr>';
+                return;
+            }
+
+            groups.forEach(group => {
+                const row = document.createElement('tr');
+                const status = group.is_restricted
+                    ? '<span class="badge badge-danger">Cheklangan</span>'
+                    : '<span class="badge badge-success">Faol</span>';
+                row.innerHTML = `
+                    <td>${group.group_id}</td>
+                    <td><strong>${group.title}</strong></td>
+                    <td>${group.members_count}</td>
+                    <td>${status}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+
+    setInterval(() => {
+        if (botStatus.isAuthorized) {
+            loadStats();
+            loadRecentDispatchers();
+        }
+    }, 30000);
+</script>
+{% endblock %}

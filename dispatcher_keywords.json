@@ -1,0 +1,41 @@
+{
+  "username_keywords": [
+    "логист", "logist", "dispatcher", "диспетчер", "диспетч",
+    "cargo", "карго", "transport", "транспорт",
+    "freight", "груз", "yuk", "юк", "gruz",
+    "perevozka", "перевозка", "tashish", "ташиш",
+    "driver", "водитель", "haydovchi", "хайдовчи",
+    "truck", "грузовик", "yuk mashina", "юк машина",
+    "delivery", "доставка", "yetkazish", "етказиш",
+    "shipping", "отправка", "jo'natish", "жўнатиш",
+    "forwarding", "экспедиция", "ekspeditsiya",
+    "logistics", "логистика", "logistika"
+  ],
+  "foreign_locations": [
+    "россия", "russia", "москва", "moscow", "moskva", "питер", "piter", "санкт-петербург",
+    "казань", "kazan", "новосибирск", "novosibirsk", "екатеринбург", "ekaterinburg",
+    "казахстан", "kazakhstan", "qozog'iston", "қозоғистон",
+    "алматы", "almaty", "астана", "astana", "нур-султан", "шымкент", "shymkent",
+    "турция", "turkey", "turkiya", "istanbul", "стамбул", "анталья", "antalya", "анкара", "ankara",
+    "европа", "europe", "польша", "poland", "германия", "germany", "берлин", "berlin",
+    "париж", "paris", "лондон", "london", "прага", "prague",
+    "таджикистан", "tajikistan", "душанбе", "dushanbe",
+    "кыргызстан", "kyrgyzstan", "бишкек", "bishkek",
+    "туркменистан", "turkmenistan", "ашхабад", "ashgabat",
+    "азербайджан", "azerbaijan", "баку", "baku",
+    "китай", "china", "xitoy", "иран", "iran", "афганистан", "afghanistan",
+    "индия", "india", "hindiston", "dubai", "дубай", "арабия", "arabia",
+    "межд", "между", "international", "снг", "cis", "европ", "cargo"
+  ],
+  "message_keywords": [
+    "срочно", "tezkor", "тезкор", "urgent",
+    "груз", "yuk", "юк", "cargo", "карго",
+    "машина", "mashina", "машина", "truck",
+    "тонн", "tonn", "тонна", "ton",
+    "маршрут", "marshrut", "маршрут", "route", "yo'l", "йўл",
+    "водитель", "haydovchi", "хайдовчи", "driver",
+    "перевозка", "tashish", "ташиш", "transport",
+    "доставка", "yetkazish", "етказиш", "delivery",
+    "заявка", "buyurtma", "буюртма", "order", "zakaz", "заказ"
+  ]
+}

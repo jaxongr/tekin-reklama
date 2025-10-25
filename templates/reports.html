@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Hisobotlar - Telegram Auto Sender{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Umumiy Statistika</h2>
+
+    <div class="form-group" style="max-width: 300px;">
+        <label class="form-label">Davr</label>
+        <select class="form-select" id="reportPeriod" onchange="loadReports()">
+            <option value="7">So'nggi 7 kun</option>
+            <option value="14">So'nggi 14 kun</option>
+            <option value="30" selected>So'nggi 30 kun</option>
+            <option value="90">So'nggi 90 kun</option>
+        </select>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-box">
+            <div class="value" id="reportUniqueUsers">0</div>
+            <div class="label">Unikal Foydalanuvchilar</div>
+        </div>
+
+        <div class="stat-box">
+            <div class="value" id="reportTotalMessages">0</div>
+            <div class="label">Yuborilgan Habarlar</div>
+        </div>
+
+        <div class="stat-box">
+            <div class="value" id="reportTotalReplies">0</div>
+            <div class="label">Auto-Reply</div>
+        </div>
+
+        <div class="stat-box">
+            <div class="value" id="reportTotalInteractions">0</div>
+            <div class="label">Interaktivlar</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Guruhlar bo'yicha Yuborilgan Habarlar</h2>
+
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Guruh Nomi</th>
+                    <th>Yuborilgan Habarlar</th>
+                    <th>Guruh ID</th>
+                </tr>
+            </thead>
+            <tbody id="messagesByGroup">
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 2rem; color: var(--gray);">
+                        Ma'lumot yo'q
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Guruhlar bo'yicha Auto-Reply</h2>
+
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Guruh Nomi</th>
+                    <th>Auto-Reply Soni</th>
+                    <th>Guruh ID</th>
+                </tr>
+            </thead>
+            <tbody id="repliesByGroup">
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 2rem; color: var(--gray);">
+                        Ma'lumot yo'q
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Export</h2>
+
+    <p style="color: var(--text-light); margin-bottom: 1.5rem;">
+        Hisobotlarni eksport qilish uchun tugmani bosing
+    </p>
+
+    <div class="btn-group">
+        <button class="btn btn-primary" onclick="exportToCSV()">
+            CSV formatida yuklab olish
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Load reports on page load
+    loadReports();
+
+    async function loadReports() {
+        const days = document.getElementById('reportPeriod').value;
+        const result = await apiRequest(`/api/stats?days=${days}`);
+
+        if (result.success) {
+            const stats = result.stats;
+
+            // Update stats cards
+            document.getElementById('reportUniqueUsers').textContent = stats.unique_users_replied;
+            document.getElementById('reportTotalMessages').textContent = stats.total_messages;
+            document.getElementById('reportTotalReplies').textContent = stats.total_autoreplies;
+            document.getElementById('reportTotalInteractions').textContent = stats.total_interactions;
+
+            // Messages by group
+            const messagesByGroup = stats.messages_by_group;
+            const msgTbody = document.getElementById('messagesByGroup');
+            msgTbody.innerHTML = '';
+
+            if (messagesByGroup.length === 0) {
+                msgTbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--gray);">
+                            Ma'lumot yo'q
+                        </td>
+                    </tr>
+                `;
+            } else {
+                messagesByGroup.forEach((group, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td><strong>${group.title || 'Noma\'lum'}</strong></td>
+                        <td>
+                            <span class="badge badge-success">${group.message_count}</span>
+                        </td>
+                        <td>${group.group_id}</td>
+                    `;
+                    msgTbody.appendChild(row);
+                });
+            }
+
+            // Replies by group
+            const repliesByGroup = stats.replies_by_group;
+            const replyTbody = document.getElementById('repliesByGroup');
+            replyTbody.innerHTML = '';
+
+            if (repliesByGroup.length === 0) {
+                replyTbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--gray);">
+                            Ma'lumot yo'q
+                        </td>
+                    </tr>
+                `;
+            } else {
+                repliesByGroup.forEach((group, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td><strong>${group.title || 'Noma\'lum'}</strong></td>
+                        <td>
+                            <span class="badge badge-warning">${group.reply_count}</span>
+                        </td>
+                        <td>${group.group_id}</td>
+                    `;
+                    replyTbody.appendChild(row);
+                });
+            }
+        }
+    }
+
+    async function exportToCSV() {
+        const days = document.getElementById('reportPeriod').value;
+        const result = await apiRequest(`/api/stats?days=${days}`);
+
+        if (!result.success) {
+            showAlert('Export xatolik', 'danger');
+            return;
+        }
+
+        const stats = result.stats;
+
+        // Create CSV content
+        let csv = 'TELEGRAM AUTO SENDER - HISOBOT\n\n';
+        csv += `Davr: So'nggi ${days} kun\n`;
+        csv += `Yaratildi: ${new Date().toLocaleString('uz-UZ')}\n\n`;
+
+        csv += 'UMUMIY STATISTIKA\n';
+        csv += `Unikal foydalanuvchilar,${stats.unique_users_replied}\n`;
+        csv += `Yuborilgan habarlar,${stats.total_messages}\n`;
+        csv += `Auto-reply,${stats.total_autoreplies}\n`;
+        csv += `Interaktivlar,${stats.total_interactions}\n\n`;
+
+        csv += 'GURUHLAR BO\'YICHA YUBORILGAN HABARLAR\n';
+        csv += '#,Guruh Nomi,Habarlar Soni,Guruh ID\n';
+        stats.messages_by_group.forEach((group, index) => {
+            csv += `${index + 1},"${group.title}",${group.message_count},${group.group_id}\n`;
+        });
+
+        csv += '\nGURUHLAR BO\'YICHA AUTO-REPLY\n';
+        csv += '#,Guruh Nomi,Reply Soni,Guruh ID\n';
+        stats.replies_by_group.forEach((group, index) => {
+            csv += `${index + 1},"${group.title}",${group.reply_count},${group.group_id}\n`;
+        });
+
+        // Download CSV
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `telegram_report_${Date.now()}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showAlert('Hisobot muvaffaqiyatli yuklab olindi!', 'success');
+    }
+</script>
+{% endblock %}

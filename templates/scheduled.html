@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Rejalashtirilgan Habarlar - Telegram Auto Sender{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Yangi Rejalashtirilgan Habar</h2>
+
+    <form id="scheduleForm" onsubmit="addScheduledMessage(event)">
+        <div class="form-group">
+            <label class="form-label">Xabar Matni</label>
+            <textarea class="form-textarea" id="messageText" required
+                placeholder="Bu yerga xabar matnini kiriting..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Yuborish Vaqti</label>
+            <input type="datetime-local" class="form-input" id="scheduleTime" required>
+        </div>
+
+        <div class="alert alert-info">
+            Xabar belgilangan vaqtda barcha guruhlarga avtomatik yuboriladi (3-5 soniya oraliq bilan)
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">
+                Rejalashtirish
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Rejalashtirilgan Habarlar Ro'yxati</h2>
+
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Xabar</th>
+                    <th>Vaqt</th>
+                    <th>Status</th>
+                    <th>Yuborildi / Jami</th>
+                    <th>Amallar</th>
+                </tr>
+            </thead>
+            <tbody id="scheduledList">
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: var(--gray);">
+                        Rejalashtirilgan habarlar yo'q
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Set minimum datetime to now
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('scheduleTime').min = now.toISOString().slice(0, 16);
+
+    // Load scheduled messages on page load
+    loadScheduledMessages();
+
+    async function addScheduledMessage(event) {
+        event.preventDefault();
+
+        const messageText = document.getElementById('messageText').value;
+        const scheduleTime = document.getElementById('scheduleTime').value;
+
+        const result = await apiRequest('/api/scheduled/add', {
+            method: 'POST',
+            body: JSON.stringify({
+                message_text: messageText,
+                schedule_time: scheduleTime
+            })
+        });
+
+        if (result.success) {
+            showAlert('Xabar muvaffaqiyatli rejalashtirildi!', 'success');
+            document.getElementById('scheduleForm').reset();
+
+            // Reset datetime min
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('scheduleTime').min = now.toISOString().slice(0, 16);
+
+            loadScheduledMessages();
+        } else {
+            showAlert('Xatolik: ' + (result.error || 'Noma\'lum xato'), 'danger');
+        }
+    }
+
+    async function loadScheduledMessages() {
+        const result = await apiRequest('/api/scheduled/list');
+
+        if (result.success) {
+            const messages = result.messages;
+            const tbody = document.getElementById('scheduledList');
+            tbody.innerHTML = '';
+
+            if (messages.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--gray);">
+                            Rejalashtirilgan habarlar yo'q
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            messages.forEach(msg => {
+                const row = document.createElement('tr');
+
+                const statusBadge = getStatusBadge(msg.status);
+                const scheduleDate = new Date(msg.schedule_time);
+                const messagePreview = msg.message_text.length > 50
+                    ? msg.message_text.substring(0, 50) + '...'
+                    : msg.message_text;
+
+                row.innerHTML = `
+                    <td>${msg.id}</td>
+                    <td>${messagePreview}</td>
+                    <td>${scheduleDate.toLocaleString('uz-UZ')}</td>
+                    <td>${statusBadge}</td>
+                    <td>${msg.sent_count || 0} / ${msg.total_groups || 0}</td>
+                    <td>
+                        ${msg.status === 'pending' ? `
+                            <button class="btn btn-sm btn-success" onclick="sendNow(${msg.id})">
+                                Hozir Yuborish
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteScheduled(${msg.id})">
+                                O'chirish
+                            </button>
+                        ` : ''}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+
+    function getStatusBadge(status) {
+        const badges = {
+            'pending': '<span class="badge badge-warning">Kutilmoqda</span>',
+            'sending': '<span class="badge badge-primary">Yuborilmoqda</span>',
+            'completed': '<span class="badge badge-success">Yuborildi</span>',
+            'failed': '<span class="badge badge-danger">Xato</span>'
+        };
+        return badges[status] || badges['pending'];
+    }
+
+    async function sendNow(messageId) {
+        if (!confirm('Bu xabarni hozir barcha guruhlarga yuborishni xohlaysizmi?')) {
+            return;
+        }
+
+        showAlert('Xabar yuborilmoqda...', 'info');
+
+        const result = await apiRequest(`/api/scheduled/send_now/${messageId}`, {
+            method: 'POST'
+        });
+
+        if (result.success) {
+            showAlert(`Xabar muvaffaqiyatli yuborildi! ${result.sent} / ${result.total} guruhga`, 'success');
+            loadScheduledMessages();
+        } else {
+            showAlert('Xatolik: ' + (result.error || 'Noma\'lum xato'), 'danger');
+        }
+    }
+
+    async function deleteScheduled(messageId) {
+        if (!confirm('Bu xabarni o\'chirmoqchimisiz?')) {
+            return;
+        }
+
+        const result = await apiRequest(`/api/scheduled/delete/${messageId}`, {
+            method: 'DELETE'
+        });
+
+        if (result.success) {
+            showAlert('Xabar o\'chirildi', 'success');
+            loadScheduledMessages();
+        }
+    }
+
+    // Auto-refresh every 30 seconds
+    setInterval(loadScheduledMessages, 30000);
+</script>
+{% endblock %}
