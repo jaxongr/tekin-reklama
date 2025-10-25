@@ -51,14 +51,42 @@ class TelegramAutoSender:
 
         return 'authorized'
 
-    async def verify_code(self, code):
+    async def verify_code(self, code, password=None):
         """Verify the code sent to phone"""
         try:
-            await self.client.sign_in(self.phone, code)
+            # Convert code to integer if it's a string
+            code_int = int(code) if isinstance(code, str) else code
+
+            # Try to sign in with code
+            await self.client.sign_in(self.phone, code_int)
             return True
         except Exception as e:
-            print(f"Code verification error: {e}")
-            return False
+            error_str = str(e).lower()
+
+            # Check if password is needed (2FA)
+            if 'password' in error_str or '2fa' in error_str or 'session_password_needed' in error_str:
+                print(f"Password required for 2FA: {e}")
+
+                # If password is provided, try to use it
+                if password:
+                    try:
+                        await self.client.sign_in(password=password)
+                        return True
+                    except Exception as pwd_error:
+                        print(f"Password verification failed: {pwd_error}")
+                        return False
+
+                return 'password_required'
+
+            # Check if code is invalid
+            elif 'invalid' in error_str or 'expired' in error_str:
+                print(f"Invalid or expired code: {e}")
+                return False
+
+            # Other errors
+            else:
+                print(f"Code verification error: {e}")
+                return False
 
     async def load_saved_session(self):
         """Load previously saved session"""

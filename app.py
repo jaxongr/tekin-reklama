@@ -97,17 +97,22 @@ def api_telegram_verify():
     """Verify code"""
     data = request.json
     code = data.get('code')
+    password = data.get('password')
 
     if not code:
         return jsonify({'success': False, 'error': 'Code required'})
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(telegram_bot.verify_code(code))
+    result = loop.run_until_complete(telegram_bot.verify_code(code, password))
 
-    if result:
+    # Handle different responses
+    if result is True:
         return jsonify({'success': True, 'message': 'Authorized successfully'})
-    return jsonify({'success': False, 'error': 'Invalid code'})
+    elif result == 'password_required':
+        return jsonify({'success': False, 'error': 'password_required', 'message': 'This account has 2FA enabled. Please provide your password.'})
+    else:
+        return jsonify({'success': False, 'error': 'Invalid or expired code'})
 
 @app.route('/api/telegram/load_session', methods=['POST'])
 def api_load_session():

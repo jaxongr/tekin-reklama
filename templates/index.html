@@ -38,6 +38,10 @@
             <label class="form-label">Kod</label>
             <input type="text" class="form-input" id="code" placeholder="12345">
         </div>
+        <div class="form-group" id="password-field" style="display: none;">
+            <label class="form-label">Parol (2FA)</label>
+            <input type="password" class="form-input" id="password" placeholder="Parolingiz">
+        </div>
         <div class="btn-group">
             <button class="btn btn-success" onclick="verifyCode()">Tasdiqlash</button>
         </div>
@@ -204,17 +208,25 @@
             return;
         }
 
+        const password = document.getElementById('password').value || null;
+
         const result = await apiRequest('/api/telegram/verify', {
             method: 'POST',
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ code, password })
         });
 
         if (result.success) {
             showAuthorized();
             showAlert('Tasdiqlandi!', 'success');
             loadStats();
+            loadRecentDispatchers();
+            loadGroups();
+        } else if (result.error === 'password_required') {
+            // Show password field if 2FA is enabled
+            document.getElementById('password-field').style.display = 'block';
+            showAlert('Parol kerak (2FA yoqilgan)', 'warning');
         } else {
-            showAlert('Noto\'g\'ri kod', 'danger');
+            showAlert('Noto\'g\'ri kod yoki parol', 'danger');
         }
     }
 
