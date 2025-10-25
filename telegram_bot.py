@@ -128,8 +128,9 @@ class TelegramAutoSender:
                         print(f"[INIT] Returning: not_registered")
                         return 'not_registered'
                     else:
-                        print(f"[INIT] Returning: code_error")
-                        return 'code_error'
+                        # Return actual error message for debugging
+                        print(f"[INIT] Returning actual error: {error_msg}")
+                        return f'error: {error_msg}'
             else:
                 print("[INIT] Already authorized!")
                 return 'authorized'

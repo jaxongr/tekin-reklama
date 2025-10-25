@@ -108,6 +108,11 @@ def api_telegram_init():
     elif result == 'code_error':
         msg = 'Kod yuborishda xatolik yuz berdi. Qayta urinib koring.'
         return jsonify({'success': False, 'error': 'code_error', 'message': msg})
+    elif result and result.startswith('error:'):
+        # Show actual error from Telegram
+        actual_error = result[6:]  # Remove 'error:' prefix
+        msg = f'Telegram xatosi: {actual_error}'
+        return jsonify({'success': False, 'error': 'telegram_error', 'message': msg})
     elif result == 'invalid_api':
         msg = 'API ID yoki API Hash notogri. Developer.telegram.org da tekshiring.'
         return jsonify({'success': False, 'error': 'invalid_api', 'message': msg})
