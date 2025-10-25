@@ -163,6 +163,19 @@ class TelegramAutoSender:
         try:
             print("[VERIFY] Starting code verification...")
 
+            # If we have the client from initialize, just use it directly
+            if self.client and await self.client.is_connected():
+                print("[VERIFY] Using existing connected client from initialize()")
+                try:
+                    code_str = str(code).strip()
+                    print(f"[VERIFY] Signing in with code (length: {len(code_str)})")
+                    await self.client.sign_in(self.phone, code_str)
+                    print("[VERIFY] ✓ Sign in SUCCESSFUL!")
+                    return True
+                except Exception as direct_error:
+                    print(f"[VERIFY] Direct sign-in failed: {direct_error}")
+                    # Fall through to rebuild client
+
             # Load credentials from config
             phone_to_use = None
             api_id = None
@@ -173,10 +186,9 @@ class TelegramAutoSender:
                     phone_to_use = saved_config.get('phone')
                     api_id = saved_config.get('api_id')
                     api_hash = saved_config.get('api_hash')
-                    print(f"[VERIFY] Loaded credentials from config")
-                    print(f"[VERIFY] Phone: {phone_to_use}")
+                    print(f"[VERIFY] Loaded credentials from config: phone={phone_to_use}")
             except Exception as cfg_error:
-                print(f"[VERIFY] ERROR: Could not load config: {cfg_error}")
+                print(f"[VERIFY] ERROR loading config: {cfg_error}")
                 return False
 
             if not all([phone_to_use, api_id, api_hash]):
@@ -185,91 +197,65 @@ class TelegramAutoSender:
 
             # Code should be string for Telethon
             code_str = str(code).strip()
-            print(f"[VERIFY] Code length: {len(code_str)}")
+            print(f"[VERIFY] Code to verify (length: {len(code_str)})")
 
-            # Recreate client from session to ensure proper state
+            # Recreate client from session file
             session_path = config.SESSION_DIR / self.session_name
-            print(f"[VERIFY] Using session: {session_path}")
+            print(f"[VERIFY] Session file: {session_path}")
 
-            # Retry logic in case session file is locked
-            client = None
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    if attempt > 0:
-                        print(f"[VERIFY] Retry attempt {attempt}/{max_retries-1}")
-                        import asyncio
-                        await asyncio.sleep(0.5)
+            # Check if session file exists
+            import os
+            session_file = f"{session_path}.session"
+            if os.path.exists(session_file):
+                print(f"[VERIFY] Session file exists, attempting to restore...")
+            else:
+                print(f"[VERIFY] No session file found - this might be the problem!")
 
-                    client = TelegramClient(
-                        str(session_path),
-                        int(api_id),
-                        api_hash,
-                        request_retries=3,
-                        connection_retries=3
-                    )
-                    print("[VERIFY] Client created")
+            client = TelegramClient(
+                str(session_path),
+                int(api_id),
+                api_hash,
+                request_retries=3,
+                connection_retries=3
+            )
+            print("[VERIFY] Client created from session")
 
-                    # Connect to Telegram with timeout
-                    print("[VERIFY] Connecting to Telegram...")
-                    await client.connect()
-                    print("[VERIFY] Connected to Telegram")
-                    break
-                except Exception as connect_error:
-                    print(f"[VERIFY] Connection attempt {attempt+1} failed: {connect_error}")
-                    if attempt == max_retries - 1:
-                        raise
+            # Connect to Telegram
+            print("[VERIFY] Connecting to Telegram...")
+            await client.connect()
+            print("[VERIFY] Connected!")
 
             # Sign in with code
-            try:
-                print(f"[VERIFY] Calling sign_in with phone={phone_to_use}, code_length={len(code_str)}")
-                await client.sign_in(phone_to_use, code_str)
-                print("[VERIFY] ✓ Sign in SUCCESSFUL!")
+            print(f"[VERIFY] Calling sign_in(phone={phone_to_use}, code=***)")
+            await client.sign_in(phone_to_use, code_str)
+            print("[VERIFY] ✓ Sign in SUCCESSFUL!")
 
-                # Save client for future use
-                self.client = client
-                return True
-
-            except Exception as sign_in_error:
-                error_type = type(sign_in_error).__name__
-                error_msg = str(sign_in_error).lower()
-                print(f"[VERIFY] Sign-in error!")
-                print(f"[VERIFY] Type: {error_type}")
-                print(f"[VERIFY] Message: {error_msg}")
-
-                # Check if password is needed (2FA)
-                if 'password' in error_msg or '2fa' in error_msg or 'session_password_needed' in error_msg:
-                    print(f"[VERIFY] -> Password required for 2FA")
-
-                    if password:
-                        try:
-                            print(f"[VERIFY] Attempting 2FA with password...")
-                            await client.sign_in(password=password)
-                            print("[VERIFY] ✓ 2FA sign in SUCCESSFUL!")
-                            self.client = client
-                            return True
-                        except Exception as pwd_error:
-                            print(f"[VERIFY] Password verification failed: {pwd_error}")
-                            return False
-
-                    return 'password_required'
-
-                # Check if code is invalid
-                elif 'invalid' in error_msg or 'expired' in error_msg or 'code_invalid' in error_msg:
-                    print(f"[VERIFY] -> Invalid or expired code")
-                    return False
-
-                else:
-                    print(f"[VERIFY] -> Other sign-in error")
-                    raise
+            # Save client for future use
+            self.client = client
+            self.phone = phone_to_use
+            return True
 
         except Exception as e:
-            print(f"[VERIFY] EXCEPTION occurred!")
-            print(f"[VERIFY] Type: {type(e).__name__}")
-            print(f"[VERIFY] Message: {str(e)}")
+            error_type = type(e).__name__
+            error_msg = str(e).lower()
+            print(f"[VERIFY] EXCEPTION: {error_type}")
+            print(f"[VERIFY] Message: {error_msg}")
             import traceback
             traceback.print_exc()
-            return False
+
+            # Check if password is needed (2FA)
+            if 'password' in error_msg or '2fa' in error_msg or 'session_password_needed' in error_msg:
+                print(f"[VERIFY] -> Password required for 2FA")
+                return 'password_required'
+
+            # Check if code is invalid
+            elif 'invalid' in error_msg or 'expired' in error_msg or 'code_invalid' in error_msg:
+                print(f"[VERIFY] -> Invalid or expired code")
+                return False
+
+            else:
+                print(f"[VERIFY] -> Unexpected error during verification")
+                return False
 
     async def load_saved_session(self):
         """Load previously saved session"""
