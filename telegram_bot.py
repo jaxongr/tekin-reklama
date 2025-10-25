@@ -48,8 +48,10 @@ class TelegramAutoSender:
             # Validate phone format
             validated_phone = self._validate_phone(phone)
             if not validated_phone:
-                print(f"Invalid phone format: {phone}")
+                print(f"[INIT] Invalid phone format: {phone}")
                 return 'invalid_phone'
+
+            print(f"[INIT] Phone validated: {validated_phone}")
 
             self.api_id = api_id
             self.api_hash = api_hash
@@ -57,17 +59,26 @@ class TelegramAutoSender:
 
             session_path = config.SESSION_DIR / self.session_name
 
-            # Remove old session if exists to avoid conflicts
+            # Remove old session if exists
             import os
             session_file = f"{session_path}.session"
             if os.path.exists(session_file):
                 try:
                     os.remove(session_file)
-                    print(f"Removed old session file")
-                except:
-                    pass
+                    print(f"[INIT] Removed old session file: {session_file}")
+                except Exception as e:
+                    print(f"[INIT] Could not remove session: {e}")
 
-            self.client = TelegramClient(str(session_path), int(api_id), api_hash)
+            print(f"[INIT] Creating TelegramClient with api_id={api_id}, session={session_path}")
+
+            # Create client with request timeout
+            self.client = TelegramClient(
+                str(session_path),
+                int(api_id),
+                api_hash,
+                request_retries=3,
+                connection_retries=3
+            )
 
             # Save config
             config_data = {
@@ -77,46 +88,68 @@ class TelegramAutoSender:
             }
             with open(config.TELEGRAM_CONFIG_FILE, 'w') as f:
                 json.dump(config_data, f)
+            print(f"[INIT] Config saved")
 
-            print(f"Connecting to Telegram with phone: {validated_phone}")
+            print(f"[INIT] Connecting to Telegram...")
             await self.client.connect()
+            print(f"[INIT] Connected!")
 
-            if not await self.client.is_user_authorized():
-                print(f"Not authorized. Sending code request to {validated_phone}")
+            is_authorized = await self.client.is_user_authorized()
+            print(f"[INIT] Is authorized: {is_authorized}")
+
+            if not is_authorized:
+                print(f"[INIT] Not authorized. Sending code request to {validated_phone}")
 
                 try:
-                    # Send code request
-                    print(f"Attempting send_code_request with phone: {validated_phone}")
+                    print(f"[INIT] Calling send_code_request...")
                     result = await self.client.send_code_request(validated_phone)
-                    print(f"Code request sent successfully. Result: {result}")
+                    print(f"[INIT] send_code_request result: {result}")
+                    print(f"[INIT] Code request sent successfully!")
                     return 'code_required'
                 except Exception as code_error:
-                    error_str = str(code_error).lower()
-                    print(f"Code request error: {code_error}")
-                    print(f"Error type: {type(code_error).__name__}")
+                    error_type = type(code_error).__name__
+                    error_msg = str(code_error)
+                    print(f"[INIT] Code request failed!")
+                    print(f"[INIT] Error type: {error_type}")
+                    print(f"[INIT] Error message: {error_msg}")
+
+                    error_str = error_msg.lower()
 
                     if 'invalid' in error_str or 'phone' in error_str:
+                        print(f"[INIT] Returning: invalid_phone")
                         return 'invalid_phone'
                     elif 'flood' in error_str or 'too many' in error_str:
+                        print(f"[INIT] Returning: flood_wait")
                         return 'flood_wait'
                     elif 'not registered' in error_str or 'signup' in error_str:
+                        print(f"[INIT] Returning: not_registered")
                         return 'not_registered'
                     else:
+                        print(f"[INIT] Returning: code_error")
                         return 'code_error'
             else:
-                print("Already authorized")
+                print("[INIT] Already authorized!")
                 return 'authorized'
 
         except Exception as e:
-            print(f"Initialize error: {e}")
-            print(f"Error type: {type(e).__name__}")
-            error_str = str(e).lower()
+            error_type = type(e).__name__
+            error_msg = str(e)
+            print(f"[INIT] EXCEPTION occurred!")
+            print(f"[INIT] Error type: {error_type}")
+            print(f"[INIT] Error message: {error_msg}")
+            import traceback
+            traceback.print_exc()
+
+            error_str = error_msg.lower()
 
             if 'api' in error_str or 'hash' in error_str:
+                print(f"[INIT] Returning: invalid_api")
                 return 'invalid_api'
             elif 'connection' in error_str or 'network' in error_str:
+                print(f"[INIT] Returning: connection_error")
                 return 'connection_error'
             else:
+                print(f"[INIT] Returning: initialization_error")
                 return 'initialization_error'
 
     async def verify_code(self, code, password=None):
